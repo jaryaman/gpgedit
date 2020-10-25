@@ -5,17 +5,17 @@ A python package for making and editing gpg-encrypted files on Linux.
 ## Installation
 ### Minimal installation (not recommended)
 ```
-pip install git+https://github.com/jaryaman/gpgedit@master
+$ pip install git+https://github.com/jaryaman/gpgedit@master
 ```
 
 ### Installation to virtual environment (recommended)
 Assuming you have venv installed (if not [see here](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/))
 
 ```
-cd ~
-python -m venv gpgedit
-source ~/gpgedit/bin/activate
-pip install git+https://github.com/jaryaman/gpgedit@master
+$ cd ~
+$ python -m venv gpgedit
+$ source ~/gpgedit/bin/activate
+$ pip install git+https://github.com/jaryaman/gpgedit@master
 ```
 Append this alias to `~/.bashrc`
 ```
@@ -32,5 +32,6 @@ $ python -m gpgedit /path/to/file.gp
 ```
 $ gpgedit
 (gpgedit) $ python -m gpgedit /path/to/file.gp
-$ deactivate
+(gpgedit) $ deactivate
+$ 
 ```
