@@ -34,8 +34,8 @@ def _make_backup(file: 'File', backup_suffix=BACKUP_SUFFIX):
 
 def _initialize_temp(path: PosixPath):
     temp_file = File(path=path)
-    temp_file.parent.mkdir()
-    os.chmod(temp_file.path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+    temp_file.mkdir()
+    os.chmod(temp_file.path.parent, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
     return temp_file
 
 
@@ -78,9 +78,9 @@ def edit_encrypted(data_file_path: PosixPath):
     data_file.get_stats()
 
     backup_file = _make_backup(data_file)
-    temp_file = _initialize_temp(Path(TMP_DIR)/TMP_FILE_NAME)
 
     try:
+        temp_file = _initialize_temp(Path(TMP_DIR)/TMP_FILE_NAME)
         passwd = getpass.getpass()
         _decrypt_data_to_temp(data_file, temp_file, passwd)
         _augment(temp_file)
