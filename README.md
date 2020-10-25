@@ -1,6 +1,6 @@
 # gpgedit
 
-WIP: A python package for making and editing gpg-encrypted files.
+A python package for making and editing gpg-encrypted files on Linux.
 
 ## Installation
 ### Minimal installation (not recommended)
@@ -9,6 +9,8 @@ pip install git+https://github.com/jaryaman/gpgedit@master
 ```
 
 ### Installation to virtual environment (recommended)
+Assuming you have venv installed (if not [see here](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/))
+
 ```
 cd ~
 python -m venv gpgedit
