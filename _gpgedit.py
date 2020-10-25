@@ -110,7 +110,7 @@ def generate(data_file_path: PosixPath):
 
     msg = input('Message:')
     passwd = getpass.getpass()
-    cmd = f'echo {msg} | gpg - a - c > {str(data_file_path)}'
+    cmd = f'echo "{msg}" | gpg -a -c > {str(data_file_path)}'
     proc = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE)
     proc.stdin.write(bytes(passwd, 'utf-8'))
     proc.stdin.close()
