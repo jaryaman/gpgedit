@@ -8,5 +8,4 @@ if __name__ == '__main__':
     if data_file_path.exists():
         edit_encrypted(data_file_path)
     else:
-        #generate_encrypted(data_file_path)
-        raise NotImplementedError
+        generate_encrypted(data_file_path)        

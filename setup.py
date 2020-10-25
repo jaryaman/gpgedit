@@ -13,7 +13,7 @@ if '__main__' == __name__:
         license=open('LICENSE.txt').read(),
         long_description=open('README.md').read(),
         name='gpgedit',
-        version='0.0.0',
+        version=open('version.txt').read().strip(),
     )
 
 sys.exit(0)

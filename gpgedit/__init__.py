@@ -102,6 +102,7 @@ def _prompt_for_path():
     else:
         return path
 
+
 def get_input_message():
     return input('Message:')
 
@@ -109,13 +110,21 @@ def get_input_message():
 def generate_encrypted(data_file_path: PosixPath):
     if not data_file_path.parent.exists():
         data_file_path.parent.mkdir(exist_ok=True)
-
+    
+    data_file = File(data_file_path)
     msg = get_input_message()
+    msg += '\n'
     passwd = getpass.getpass()
-    cmd = f'echo "{msg}" | gpg -a -c > {str(data_file_path)}'
-    proc = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE)
-    proc.stdin.write(bytes(passwd, 'utf-8'))
-    proc.stdin.close()
+
+    try:
+        temp_file = _initialize_temp(Path(TMP_DIR)/TMP_FILE_NAME)
+        with temp_file.path.open(mode='w') as f:
+            f.write(msg)
+        _encrypt_temp_to_data(temp_file, data_file, passwd)
+    except Exception as e:
+        raise e
+    finally:
+        shutil.rmtree(temp_file.path.parent)
 
 
 # *** classes ***
