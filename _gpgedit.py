@@ -74,8 +74,7 @@ def _file_changed(file: 'File'):
             or file.stats[-1].st_size != file.stats[-2].st_size)
 
 
-def edit():
-    data_file_path = _get_input_file()
+def edit(data_file_path: PosixPath):
     data_file = File(path=data_file_path)
     data_file.get_stats()
 
@@ -105,12 +104,13 @@ def _prompt_for_path():
         return path
 
 
-def generate():
-    path = _prompt_for_path()
-    msg = input('Message:')
+def generate(data_file_path: PosixPath):
+    if not data_file_path.parent.exists():
+        data_file_path.parent.mkdir(exist_ok=True)
 
+    msg = input('Message:')
     passwd = getpass.getpass()
-    cmd = f'echo {msg} | gpg - a - c > {path}'
+    cmd = f'echo {msg} | gpg - a - c > {str(data_file_path)}'
     proc = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE)
     proc.stdin.write(bytes(passwd, 'utf-8'))
     proc.stdin.close()
@@ -131,5 +131,9 @@ class File:
 
 
 if __name__ == '__main__':
-    generate()
-    edit()
+    _data_file_path = _get_input_file()
+    if _data_file_path.exists():
+        edit(_data_file_path)
+    else:
+        generate(_data_file_path)
+
