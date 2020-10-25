@@ -1,14 +1,12 @@
 #!/usr/bin/python
-import os
-import sys
-import subprocess
 import getpass
-import stat
+import os
 import shutil
-from pathlib import Path
-from pathlib import PosixPath
+import stat
+import subprocess
+import sys
+from pathlib import Path, PosixPath
 from warnings import warn
-
 
 # *** global variables ***
 EDITOR = 'vim'
@@ -103,16 +101,12 @@ def _prompt_for_path():
         return path
 
 
-def get_input_message():
-    return input('Message:')
-
-
 def generate_encrypted(data_file_path: PosixPath):
     if not data_file_path.parent.exists():
         data_file_path.parent.mkdir(exist_ok=True)
     
     data_file = File(data_file_path)
-    msg = get_input_message()
+    msg = input('Message:')
     msg += '\n'
     passwd = getpass.getpass()
 
