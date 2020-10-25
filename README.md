@@ -15,7 +15,10 @@ Assuming you have venv installed (if not [see here](https://packaging.python.org
 $ cd ~
 $ python -m venv gpgedit
 $ source ~/gpgedit/bin/activate
-$ pip install git+https://github.com/jaryaman/gpgedit@master
+(gpgedit) $ pip install wheel
+(gpgedit) $ pip install git+https://github.com/jaryaman/gpgedit@master
+(gpgedit) $ deactivate
+$
 ```
 Append this alias to `~/.bashrc`
 ```
