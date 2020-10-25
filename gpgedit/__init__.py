@@ -18,7 +18,7 @@ TMP_FILE_NAME = 'data'
 
 
 # *** functions ***
-def _get_input_file():
+def get_input_file():
     if len(sys.argv) > 1:
         data_file = sys.argv[1]
     else:
@@ -34,8 +34,7 @@ def _make_backup(file: 'File', backup_suffix=BACKUP_SUFFIX):
 
 def _initialize_temp(path: PosixPath):
     temp_file = File(path=path)
-    temp_file.get_stats()
-    temp_file.mkdir()
+    temp_file.parent.mkdir()
     os.chmod(temp_file.path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
     return temp_file
 
@@ -74,7 +73,7 @@ def _file_changed(file: 'File'):
             or file.stats[-1].st_size != file.stats[-2].st_size)
 
 
-def edit(data_file_path: PosixPath):
+def edit_encrypted(data_file_path: PosixPath):
     data_file = File(path=data_file_path)
     data_file.get_stats()
 
@@ -103,12 +102,15 @@ def _prompt_for_path():
     else:
         return path
 
+def get_input_message():
+    return input('Message:')
 
-def generate(data_file_path: PosixPath):
+
+def generate_encrypted(data_file_path: PosixPath):
     if not data_file_path.parent.exists():
         data_file_path.parent.mkdir(exist_ok=True)
 
-    msg = input('Message:')
+    msg = get_input_message()
     passwd = getpass.getpass()
     cmd = f'echo "{msg}" | gpg -a -c > {str(data_file_path)}'
     proc = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE)
@@ -128,12 +130,3 @@ class File:
     def mkdir(self, exist_ok=False):
         parent = self.path.parent
         parent.mkdir(exist_ok=exist_ok)
-
-
-if __name__ == '__main__':
-    _data_file_path = _get_input_file()
-    if _data_file_path.exists():
-        edit(_data_file_path)
-    else:
-        generate(_data_file_path)
-

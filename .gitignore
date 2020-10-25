@@ -2,3 +2,5 @@ work/
 .idea/
 __pycache__
 *.egg-info
+.vscode
+*.gpg
