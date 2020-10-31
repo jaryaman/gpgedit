@@ -30,9 +30,9 @@ def _make_backup(file: 'File', backup_suffix=BACKUP_SUFFIX):
     return backup_file
 
 
-def _initialize_temp(path: PosixPath):
+def _initialize_temp(path: PosixPath, exist_ok = False):
     temp_file = File(path=path)
-    temp_file.mkdir()
+    temp_file.mkdir(exist_ok = exist_ok)
     os.chmod(temp_file.path.parent, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
     return temp_file
 
@@ -45,10 +45,12 @@ def _decrypt_data_to_temp(data_file: 'File', temp_file: 'File', passwd: str):
     if proc.wait() != 0:
         raise Exception("Error decrypting file.")
 
+def _launch_editor(file: 'File'):
+    os.system('%s %s' % (EDITOR, str(file.path)))
 
 def _augment(file: 'File'):
     file.get_stats()
-    os.system('%s %s' % (EDITOR, str(file.path)))
+    _launch_editor(file)
     file.get_stats()
 
     if (file.stats[-1].st_mtime == file.stats[-2].st_mtime
