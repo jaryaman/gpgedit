@@ -1,13 +1,20 @@
-import shutil
+
+import getpass
 import os
+import shutil
 from os import stat_result
 from pathlib import Path, PosixPath
 from unittest.mock import patch
 
-from gpgedit import File, edit_encrypted, generate_encrypted, get_input_file, _make_backup, BACKUP_SUFFIX
+import subprocess  # DBG
+
+from gpgedit import (BACKUP_SUFFIX, TMP_DIR, TMP_FILE_NAME, File,
+                     _encrypt_temp_to_data,_decrypt_data_to_temp,  _make_backup, edit_encrypted,
+                     generate_encrypted, get_input_file)
 
 # *** global variables ***
 TEST_FILE = 'test.gpg'
+RESOURCES = './resources'
 
 
 # *** functions ***
@@ -77,16 +84,46 @@ def test__initialize_temp():
     pass
 
 def test__decrypt_data_to_temp():
-    # TODO
-    pass
+    original_file = File(Path(RESOURCES)/'test.txt')  
+    original_file.path.write_text('test text')
+
+    data_file = File(Path(TMP_DIR)/'test.gpg')
+    data_file.mkdir(exist_ok=True)
+    passwd = 'test-pswd'
+
+    enc_dec_file = File(Path(RESOURCES)/'test-dec.txt')
+    try:
+        _encrypt_temp_to_data(original_file, data_file, passwd)
+        _decrypt_data_to_temp(data_file, enc_dec_file, passwd)
+        assert original_file.path.read_text() == enc_dec_file.path.read_text()
+    except Exception as e:
+        raise e
+    finally:
+        shutil.rmtree(data_file.path.parent)
+        os.remove(original_file.path)
+        if enc_dec_file.path.exists():
+            os.remove(enc_dec_file.path)
 
 def test__augment():
     # TODO
     pass
 
 def test__encrypt_temp_to_data():
-    #TODO
-    pass
+    temp_file = File(Path(TMP_DIR)/'data-test.txt')
+    temp_file.mkdir(exist_ok=True)
+    temp_file.path.write_text('test text')
+
+    data_file = File(Path(RESOURCES)/'test.gpg')
+    passwd = 'test-pswd'
+    try:
+        _encrypt_temp_to_data(temp_file, data_file, passwd)
+        assert temp_file.path.exists()
+    except Exception as e:
+        raise e
+    finally:
+        if data_file.path.exists():
+            os.remove(data_file.path)
+        shutil.rmtree(temp_file.path.parent)
 
 def test__file_changed():
     #TODO
@@ -100,6 +137,18 @@ def test__prompt_for_path():
     # TODO
     pass
 
-def test_generate_encrypted():
-    # TODO
-    pass
+def test_generate_encrypted(mocker):
+    mocker.patch('gpgedit.get_input_message', return_value='test message')
+    mocker.patch('getpass.getpass', return_value='test-pswd')
+
+    temp_dir = Path(TMP_DIR)
+    try:
+        test_file = Path(RESOURCES)/'test.gpg'
+        generate_encrypted(test_file)
+        assert test_file.exists()
+        assert not temp_dir.exists()
+    except Exception as e:
+        raise e
+    finally:
+        os.remove(test_file)
+    
