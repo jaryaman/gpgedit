@@ -30,25 +30,27 @@ def _make_backup(file: 'File', backup_suffix=BACKUP_SUFFIX):
     return backup_file
 
 
-def _initialize_temp(path: PosixPath):
+def _initialize_temp(path: PosixPath, exist_ok = False):
     temp_file = File(path=path)
-    temp_file.mkdir()
+    temp_file.mkdir(exist_ok = exist_ok)
     os.chmod(temp_file.path.parent, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
     return temp_file
 
 
 def _decrypt_data_to_temp(data_file: 'File', temp_file: 'File', passwd: str):
-    cmd = "gpg -d --passphrase-fd 0 --output %s %s" % (str(temp_file.path), str(data_file.path))
+    cmd = "gpg -d --batch --no-tty --passphrase-fd 0 --output %s %s" % (str(temp_file.path), str(data_file.path))
     proc = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE)
     proc.stdin.write(bytes(passwd, 'utf-8'))
     proc.stdin.close()
     if proc.wait() != 0:
         raise Exception("Error decrypting file.")
 
+def _launch_editor(file: 'File'):
+    os.system('%s %s' % (EDITOR, str(file.path)))
 
 def _augment(file: 'File'):
     file.get_stats()
-    os.system('%s %s' % (EDITOR, str(file.path)))
+    _launch_editor(file)
     file.get_stats()
 
     if (file.stats[-1].st_mtime == file.stats[-2].st_mtime
@@ -57,7 +59,7 @@ def _augment(file: 'File'):
 
 
 def _encrypt_temp_to_data(temp_file: 'File', data_file: 'File', passwd: str):
-    cmd = "gpg -a --yes --symmetric --passphrase-fd 0 --output %s %s" % (str(data_file.path), str(temp_file.path))
+    cmd = "gpg -a --yes --batch --no-tty --symmetric --passphrase-fd 0 --output %s %s" % (str(data_file.path), str(temp_file.path))
     proc = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE)
     proc.stdin.write(bytes(passwd, 'utf-8'))
     proc.stdin.close()
@@ -100,13 +102,15 @@ def _prompt_for_path():
     else:
         return path
 
+def get_input_message():
+    return input('Message:')
 
 def generate_encrypted(data_file_path: PosixPath):
     if not data_file_path.parent.exists():
         data_file_path.parent.mkdir(exist_ok=True)
     
     data_file = File(data_file_path)
-    msg = input('Message:')
+    msg = get_input_message()
     msg += '\n'
     passwd = getpass.getpass()
 
