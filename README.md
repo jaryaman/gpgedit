@@ -1,6 +1,6 @@
 # gpgedit
 
-https://github.com/jaryaman/gpgedit/workflows/python-package/badge.svg
+![Python package](https://github.com/jaryaman/gpgedit/workflows/Python%20package/badge.svg)
 
 A python package for making and editing gpg-encrypted files on Linux.
 
