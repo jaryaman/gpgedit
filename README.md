@@ -17,6 +17,14 @@ $ gpgedit /path/to/file.gpg
 ```
 If the file exists it is decrypted to RAM and opened in vim; otherwise you are prompted for its contents and a new encrypted file is made.
 
+### Changing the password of existing files
+```bash
+$ gpgedit --rekey file1.gpg file2.gpg file3.gpg
+```
+You are asked for the old password once, so the files must all share it, and then for the new password twice.
+Each file is decrypted in memory, re-encrypted, and checked before the original is replaced.
+If any file cannot be decrypted, none of them are changed.
+
 ## Development
 ```
 $ git clone https://github.com/jaryaman/gpgedit

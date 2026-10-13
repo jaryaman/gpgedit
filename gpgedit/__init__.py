@@ -14,6 +14,7 @@ EDITOR = 'vim'
 # no swap file, no viminfo, no undo/backup files: nothing vim writes may outlive the session
 EDITOR_ARGS = ['-n', '-i', 'NONE', '-c', 'set noundofile nobackup nowritebackup']
 BACKUP_SUFFIX = '-gpgedit_backup'
+REKEY_SUFFIX = '-gpgedit_rekey'
 TMP_ROOT = '/dev/shm'
 TMP_DIR_PREFIX = 'gpgedit-'
 TMP_FILE_NAME = 'data'
@@ -22,11 +23,7 @@ RAM_FILESYSTEMS = ('tmpfs', 'ramfs')
 
 # *** functions ***
 def get_input_file():
-    if len(sys.argv) > 1:
-        data_file = sys.argv[1]
-    else:
-        data_file = input("Enter file: ")
-    return Path(data_file)
+    return Path(input("Enter file: "))
 
 
 def _make_backup(file: 'File', backup_suffix=BACKUP_SUFFIX):
@@ -106,6 +103,29 @@ def _encrypt_temp_to_data(temp_file: 'File', data_file: 'File', passwd: str):
         raise Exception("Error encrypting file.")
 
 
+def _decrypt_data_to_bytes(data_file: 'File', passwd: str):
+    cmd = ['gpg', '-d', '--batch', '--no-tty', '--passphrase-fd', '0', '--', str(data_file.path)]
+    proc = subprocess.run(cmd, input=bytes(passwd, 'utf-8'), stdout=subprocess.PIPE)
+    if proc.returncode != 0:
+        raise Exception("Error decrypting %s." % data_file.path)
+    return proc.stdout
+
+
+def _encrypt_bytes_to_data(data: bytes, data_file: 'File', passwd: str):
+    # the data goes in on stdin, so the passphrase needs a pipe of its own
+    passwd_read, passwd_write = os.pipe()
+    try:
+        os.write(passwd_write, bytes(passwd, 'utf-8'))
+        os.close(passwd_write)
+        cmd = ['gpg', '-a', '--yes', '--batch', '--no-tty', '--symmetric', '--passphrase-fd', str(passwd_read),
+               '--output', str(data_file.path)]
+        proc = subprocess.run(cmd, input=data, pass_fds=(passwd_read,))
+    finally:
+        os.close(passwd_read)
+    if proc.returncode != 0:
+        raise Exception("Error encrypting %s." % data_file.path)
+
+
 def _file_changed(file: 'File'):
     file.get_stats()
     return (file.stats[-1].st_mtime != file.stats[-2].st_mtime
@@ -146,8 +166,8 @@ def get_input_message():
     return getpass.getpass('Message:')
 
 
-def _get_new_passphrase():
-    passwd = getpass.getpass()
+def _get_new_passphrase(prompt='Password: '):
+    passwd = getpass.getpass(prompt)
     if getpass.getpass('Repeat password: ') != passwd:
         raise Exception("Passwords do not match.")
     return passwd
@@ -171,6 +191,33 @@ def generate_encrypted(data_file_path: PosixPath):
         raise e
     finally:
         _remove_temp(temp_file)
+
+
+def rekey(data_file_paths):
+    """Re-encrypt files that share one password under a new password, changing all of them or none"""
+    data_files = [File(path) for path in dict.fromkeys(data_file_paths)]
+    old_passwd = getpass.getpass('Old password: ')
+    # the plaintext is only ever held in memory; decrypting everything first means a wrong
+    # password or an unreadable file stops us before any file is touched
+    plaintexts = [_decrypt_data_to_bytes(data_file, old_passwd) for data_file in data_files]
+    new_passwd = _get_new_passphrase('New password: ')
+
+    new_files = []
+    try:
+        for data_file, plaintext in zip(data_files, plaintexts):
+            new_file = File(data_file.path.parent/(data_file.path.name + REKEY_SUFFIX))
+            new_files.append(new_file)
+            _encrypt_bytes_to_data(plaintext, new_file, new_passwd)
+            if _decrypt_data_to_bytes(new_file, new_passwd) != plaintext:
+                raise Exception("Rekeyed %s does not decrypt to its original contents." % data_file.path)
+            shutil.copymode(data_file.path, new_file.path)
+        for data_file, new_file in zip(data_files, new_files):
+            os.replace(new_file.path, data_file.path)
+    finally:
+        for new_file in new_files:
+            if new_file.path.exists():
+                os.remove(new_file.path)
+    print("Rekeyed %d file(s)." % len(data_files))
 
 
 # *** classes ***

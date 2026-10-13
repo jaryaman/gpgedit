@@ -1,12 +1,29 @@
+import argparse
+from pathlib import Path
+
 from gpgedit import get_input_file
 from gpgedit import edit_encrypted
 from gpgedit import generate_encrypted
 from gpgedit import install_signal_handlers
+from gpgedit import rekey
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog='gpgedit', description='Make and edit gpg-encrypted files.')
+    parser.add_argument('files', nargs='*', type=Path, metavar='FILE')
+    parser.add_argument('--rekey', action='store_true',
+                        help='re-encrypt the given files, which share one password, under a new password')
+    args = parser.parse_args(argv)
+    if args.rekey and not args.files:
+        parser.error('--rekey needs at least one file')
+    if not args.rekey and len(args.files) > 1:
+        parser.error('give one file to edit, or use --rekey for several')
+
     install_signal_handlers()
-    data_file_path = get_input_file()
+    if args.rekey:
+        rekey(args.files)
+        return
+    data_file_path = args.files[0] if args.files else get_input_file()
     if data_file_path.exists():
         edit_encrypted(data_file_path)
     else:
