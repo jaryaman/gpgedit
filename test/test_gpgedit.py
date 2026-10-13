@@ -25,6 +25,15 @@ from gpgedit.__main__ import main
 TEST_FILE = 'test.gpg'
 RESOURCES = './resources'
 MESSAGE = '***Hello world!***'
+# 'legacy secret\n' under 'legacy-pass', as GnuPG 1.x wrote it: CAST5 with no integrity protection (MDC).
+# Made with: gpg -a --symmetric --cipher-algo CAST5 --rfc2440
+LEGACY_MESSAGE = """-----BEGIN PGP MESSAGE-----
+
+jA0EAwMCth38VM8GYOdgySVzicHZQXAbTzo8xpS4zeOPaw85jzEdRgPktsh8dFBf
+3O4UOp8Z
+=EkgF
+-----END PGP MESSAGE-----
+"""
 
 
 # *** functions ***
@@ -464,7 +473,67 @@ def test_rekey_changes_nothing_when_encryption_fails_part_way(mocker, vault):
     assert sorted(p.name for p in vault.iterdir()) == ['a.gpg', 'b.gpg', 'c.gpg']
 
 
+def test_rekey_refuses_file_without_integrity_protection_by_default(mocker, tmp_path):
+    legacy = tmp_path/'legacy_enc.txt'
+    legacy.write_text(LEGACY_MESSAGE)
+    mocker.patch('getpass.getpass', side_effect=['legacy-pass', 'new-pass', 'new-pass'])
+
+    with pytest.raises(Exception, match='legacy_enc.txt'):
+        rekey([legacy])
+
+    assert legacy.read_text() == LEGACY_MESSAGE
+
+def test_rekey_allow_legacy_upgrades_file_to_integrity_protected(mocker, tmp_path):
+    legacy = tmp_path/'legacy_enc.txt'
+    legacy.write_text(LEGACY_MESSAGE)
+    mocker.patch('getpass.getpass', side_effect=['legacy-pass', 'new-pass', 'new-pass'])
+
+    rekey([legacy], allow_legacy=True)
+
+    # gpg_decrypt does not pass --ignore-mdc-error, so this only succeeds on a protected file
+    decrypted = gpg_decrypt(legacy, 'new-pass')
+    assert decrypted.returncode == 0
+    assert decrypted.stdout == b'legacy secret\n'
+
+def test_rekey_allow_legacy_also_handles_current_files(mocker, vault):
+    legacy = vault/'legacy_enc.txt'
+    legacy.write_text(LEGACY_MESSAGE)
+    generate_encrypted_dummy(mocker, vault/'modern.gpg', msg='modern', pswd='legacy-pass')
+    mocker.patch('getpass.getpass', side_effect=['legacy-pass', 'new-pass', 'new-pass'])
+
+    rekey([legacy, vault/'modern.gpg'], allow_legacy=True)
+
+    assert gpg_decrypt(legacy, 'new-pass').stdout == b'legacy secret\n'
+    assert gpg_decrypt(vault/'modern.gpg', 'new-pass').stdout == b'modern\n'
+
+
 # *** tests for the command line ***
+def test_main_rekey_allow_legacy_option(mocker, tmp_path):
+    legacy = tmp_path/'legacy_enc.txt'
+    legacy.write_text(LEGACY_MESSAGE)
+    mocker.patch('getpass.getpass', side_effect=['legacy-pass', 'new-pass', 'new-pass'])
+
+    main(['--rekey', '--allow-legacy', str(legacy)])
+
+    assert gpg_decrypt(legacy, 'new-pass').stdout == b'legacy secret\n'
+
+def test_main_rekey_without_allow_legacy_leaves_legacy_file(mocker, tmp_path):
+    legacy = tmp_path/'legacy_enc.txt'
+    legacy.write_text(LEGACY_MESSAGE)
+    mocker.patch('getpass.getpass', side_effect=['legacy-pass', 'new-pass', 'new-pass'])
+
+    with pytest.raises(Exception, match='legacy_enc.txt'):
+        main(['--rekey', str(legacy)])
+
+    assert legacy.read_text() == LEGACY_MESSAGE
+
+def test_main_allow_legacy_only_applies_to_rekey(tmp_path):
+    legacy = tmp_path/'legacy_enc.txt'
+    legacy.write_text(LEGACY_MESSAGE)
+    with pytest.raises(SystemExit):
+        main(['--allow-legacy', str(legacy)])
+    assert legacy.read_text() == LEGACY_MESSAGE
+
 def test_main_rekey_option(mocker, vault):
     mocker.patch('getpass.getpass', side_effect=['old-pass', 'new-pass', 'new-pass'])
 
