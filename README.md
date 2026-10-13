@@ -5,38 +5,22 @@
 A python package for making and editing gpg-encrypted files on Linux.
 
 ## Installation
-### Minimal installation (not recommended)
-```
-$ pip install git+https://github.com/jaryaman/gpgedit@master
-```
-
-### Installation to virtual environment (recommended)
-Assuming you have venv installed (if not [see here](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/))
+Requires [uv](https://docs.astral.sh/uv/getting-started/installation/), `gpg` and `vim`.
 
 ```
-$ cd ~
-$ python -m venv gpgedit
-$ source ~/gpgedit/bin/activate
-(gpgedit) $ pip install wheel
-(gpgedit) $ pip install git+https://github.com/jaryaman/gpgedit@master
-(gpgedit) $ deactivate
-$
-```
-Append this alias to `~/.bashrc`
-```
-alias gpgedit="source ~/gpgedit/bin/activate"
+$ uv tool install git+https://github.com/jaryaman/gpgedit@master
 ```
 
 ## Usage
-### With minimal installation
 ```bash
-$ python -m gpgedit /path/to/file.gp
+$ gpgedit /path/to/file.gpg
 ```
+If the file exists it is decrypted to RAM and opened in vim; otherwise you are prompted for its contents and a new encrypted file is made.
 
-### With virtual environment
+## Development
 ```
-$ gpgedit
-(gpgedit) $ python -m gpgedit /path/to/file.gp
-(gpgedit) $ deactivate
-$ 
+$ git clone https://github.com/jaryaman/gpgedit
+$ cd gpgedit
+$ uv sync
+$ uv run pytest
 ```

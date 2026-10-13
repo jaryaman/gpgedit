@@ -1,0 +1,25 @@
+[project]
+name = "gpgedit"
+version = "0.1.0"
+description = "Make and edit gpg-encrypted files on Linux without the plaintext touching disk."
+readme = "README.md"
+license = { file = "LICENSE.txt" }
+authors = [{ name = "Juvid Aryaman", email = "j.aryaman25@gmail.com" }]
+requires-python = ">=3.8"
+dependencies = []
+
+[project.scripts]
+gpgedit = "gpgedit.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-mock",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
