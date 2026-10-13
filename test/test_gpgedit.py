@@ -12,12 +12,14 @@ from os import stat_result
 from pathlib import Path, PosixPath
 from unittest.mock import patch
 
+import gpgedit
 import pytest
 from gpgedit import (BACKUP_SUFFIX, TMP_FILE_NAME, File, _augment,
                      _decrypt_data_to_temp, _encrypt_temp_to_data,
                      _file_changed, _initialize_temp, _launch_editor,
                      _make_backup, edit_encrypted, generate_encrypted,
-                     get_input_file, get_input_message)
+                     get_input_file, get_input_message, rekey)
+from gpgedit.__main__ import main
 
 # *** global variables ***
 TEST_FILE = 'test.gpg'
@@ -37,6 +39,11 @@ def write_msg_to_file(name: str = TEST_FILE, msg = 'test'):
         f.write(msg)
     return file_struct
 
+def gpg_decrypt(path: Path, passwd: str):
+    """Decrypt with gpg directly, independently of the code under test"""
+    return subprocess.run(['gpg', '-d', '--batch', '--no-tty', '--passphrase-fd', '0', '--', str(path)],
+                          input=passwd.encode(), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
 def write_script(path: Path, body: str):
     path.write_text('#!/bin/sh\n' + body + '\n')
     path.chmod(stat.S_IRWXU)
@@ -50,6 +57,16 @@ def shm_root(mocker):
     mocker.patch('gpgedit.TMP_ROOT', str(root))
     yield root
     shutil.rmtree(root)
+
+@pytest.fixture
+def vault(mocker, shm_root, tmp_path):
+    """Three encrypted files: a.gpg and b.gpg under 'old-pass', c.gpg under 'other-pass'"""
+    directory = tmp_path/'vault'
+    directory.mkdir()
+    for name, msg, pswd in [('a.gpg', 'alpha', 'old-pass'), ('b.gpg', 'bravo', 'old-pass'),
+                            ('c.gpg', 'charlie', 'other-pass')]:
+        generate_encrypted_dummy(mocker, directory/name, msg=msg, pswd=pswd)
+    return directory
 
 
 # *** tests for classes ***
@@ -355,6 +372,134 @@ def test_generate_encrypted_rejects_mistyped_passphrase(mocker, shm_root):
     finally:
         if test_file.exists():
             os.remove(test_file)
+
+# *** tests for rekey ***
+def test_rekey_reencrypts_every_file_under_new_passphrase(mocker, vault, shm_root):
+    mocker.patch('getpass.getpass', side_effect=['old-pass', 'new-pass', 'new-pass'])
+
+    rekey([vault/'a.gpg', vault/'b.gpg'])
+
+    assert gpg_decrypt(vault/'a.gpg', 'new-pass').stdout == b'alpha\n'
+    assert gpg_decrypt(vault/'b.gpg', 'new-pass').stdout == b'bravo\n'
+    assert gpg_decrypt(vault/'a.gpg', 'old-pass').returncode != 0
+    assert gpg_decrypt(vault/'b.gpg', 'old-pass').returncode != 0
+
+def test_rekey_leaves_no_extra_files(mocker, vault, shm_root):
+    mocker.patch('getpass.getpass', side_effect=['old-pass', 'new-pass', 'new-pass'])
+
+    rekey([vault/'a.gpg', vault/'b.gpg'])
+
+    assert sorted(p.name for p in vault.iterdir()) == ['a.gpg', 'b.gpg', 'c.gpg']
+    assert list(shm_root.iterdir()) == []
+
+def test_rekey_keeps_file_permissions(mocker, vault):
+    (vault/'a.gpg').chmod(0o600)
+    mocker.patch('getpass.getpass', side_effect=['old-pass', 'new-pass', 'new-pass'])
+
+    rekey([vault/'a.gpg'])
+
+    assert stat.S_IMODE(os.stat(vault/'a.gpg').st_mode) == 0o600
+
+def test_rekey_keeps_armored_format(mocker, vault):
+    mocker.patch('getpass.getpass', side_effect=['old-pass', 'new-pass', 'new-pass'])
+
+    rekey([vault/'a.gpg'])
+
+    assert (vault/'a.gpg').read_text().startswith('-----BEGIN PGP MESSAGE-----')
+
+def test_rekey_same_file_listed_twice(mocker, vault):
+    mocker.patch('getpass.getpass', side_effect=['old-pass', 'new-pass', 'new-pass'])
+
+    rekey([vault/'a.gpg', vault/'a.gpg'])
+
+    assert gpg_decrypt(vault/'a.gpg', 'new-pass').stdout == b'alpha\n'
+
+def test_rekey_changes_nothing_when_one_file_has_another_passphrase(mocker, vault):
+    paths = [vault/'a.gpg', vault/'b.gpg', vault/'c.gpg']
+    before = [p.read_bytes() for p in paths]
+    mocker.patch('getpass.getpass', side_effect=['old-pass', 'new-pass', 'new-pass'])
+
+    with pytest.raises(Exception, match='c.gpg'):
+        rekey(paths)
+
+    assert [p.read_bytes() for p in paths] == before
+    assert sorted(p.name for p in vault.iterdir()) == ['a.gpg', 'b.gpg', 'c.gpg']
+
+def test_rekey_changes_nothing_when_a_file_is_missing(mocker, vault):
+    before = (vault/'a.gpg').read_bytes()
+    mocker.patch('getpass.getpass', side_effect=['old-pass', 'new-pass', 'new-pass'])
+
+    with pytest.raises(Exception, match='nope.gpg'):
+        rekey([vault/'a.gpg', vault/'nope.gpg'])
+
+    assert (vault/'a.gpg').read_bytes() == before
+
+def test_rekey_changes_nothing_when_new_passphrase_is_mistyped(mocker, vault):
+    before = (vault/'a.gpg').read_bytes()
+    mocker.patch('getpass.getpass', side_effect=['old-pass', 'new-pass', 'new-pasd'])
+
+    with pytest.raises(Exception, match='do not match'):
+        rekey([vault/'a.gpg'])
+
+    assert (vault/'a.gpg').read_bytes() == before
+
+def test_rekey_changes_nothing_when_encryption_fails_part_way(mocker, vault):
+    paths = [vault/'a.gpg', vault/'b.gpg']
+    before = [p.read_bytes() for p in paths]
+    mocker.patch('getpass.getpass', side_effect=['old-pass', 'new-pass', 'new-pass'])
+    real_encrypt = gpgedit._encrypt_bytes_to_data
+    calls = []
+
+    def fail_on_second_file(*args, **kwargs):
+        calls.append(args)
+        if len(calls) == 2:
+            raise Exception('disk full')
+        return real_encrypt(*args, **kwargs)
+    mocker.patch('gpgedit._encrypt_bytes_to_data', new=fail_on_second_file)
+
+    with pytest.raises(Exception, match='disk full'):
+        rekey(paths)
+
+    assert [p.read_bytes() for p in paths] == before
+    assert sorted(p.name for p in vault.iterdir()) == ['a.gpg', 'b.gpg', 'c.gpg']
+
+
+# *** tests for the command line ***
+def test_main_rekey_option(mocker, vault):
+    mocker.patch('getpass.getpass', side_effect=['old-pass', 'new-pass', 'new-pass'])
+
+    main(['--rekey', str(vault/'a.gpg'), str(vault/'b.gpg')])
+
+    assert gpg_decrypt(vault/'a.gpg', 'new-pass').stdout == b'alpha\n'
+    assert gpg_decrypt(vault/'b.gpg', 'new-pass').stdout == b'bravo\n'
+    assert gpg_decrypt(vault/'c.gpg', 'other-pass').stdout == b'charlie\n'
+
+def test_main_rekey_needs_a_file():
+    with pytest.raises(SystemExit):
+        main(['--rekey'])
+
+def test_main_without_rekey_takes_one_file(vault):
+    before = (vault/'a.gpg').read_bytes()
+    with pytest.raises(SystemExit):
+        main([str(vault/'a.gpg'), str(vault/'b.gpg')])
+    assert (vault/'a.gpg').read_bytes() == before
+
+def test_main_makes_a_new_file_when_path_does_not_exist(mocker, vault):
+    mocker.patch('gpgedit.get_input_message', return_value='delta')
+    mocker.patch('getpass.getpass', return_value='some-pass')
+
+    main([str(vault/'d.gpg')])
+
+    assert gpg_decrypt(vault/'d.gpg', 'some-pass').stdout == b'delta\n'
+
+def test_main_edits_an_existing_file(mocker, vault):
+    mocker.patch('getpass.getpass', return_value='old-pass')
+    mocker.patch('gpgedit._launch_editor', new=overwrite_file)
+
+    main([str(vault/'a.gpg')])
+
+    assert gpg_decrypt(vault/'a.gpg', 'old-pass').stdout == MESSAGE.encode()
+
 
 # *** functions ***
 

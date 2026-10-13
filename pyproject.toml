@@ -1,6 +1,6 @@
 [project]
 name = "gpgedit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Make and edit gpg-encrypted files on Linux without the plaintext touching disk."
 readme = "README.md"
 license = { file = "LICENSE.txt" }
