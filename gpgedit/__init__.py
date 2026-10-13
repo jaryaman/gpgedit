@@ -103,8 +103,12 @@ def _encrypt_temp_to_data(temp_file: 'File', data_file: 'File', passwd: str):
         raise Exception("Error encrypting file.")
 
 
-def _decrypt_data_to_bytes(data_file: 'File', passwd: str):
-    cmd = ['gpg', '-d', '--batch', '--no-tty', '--passphrase-fd', '0', '--', str(data_file.path)]
+def _decrypt_data_to_bytes(data_file: 'File', passwd: str, allow_legacy=False):
+    cmd = ['gpg', '-d', '--batch', '--no-tty', '--passphrase-fd', '0']
+    if allow_legacy:
+        # files from GnuPG 1.x have no integrity protection (MDC), which gpg otherwise refuses to decrypt
+        cmd.append('--ignore-mdc-error')
+    cmd += ['--', str(data_file.path)]
     proc = subprocess.run(cmd, input=bytes(passwd, 'utf-8'), stdout=subprocess.PIPE)
     if proc.returncode != 0:
         raise Exception("Error decrypting %s." % data_file.path)
@@ -193,13 +197,16 @@ def generate_encrypted(data_file_path: PosixPath):
         _remove_temp(temp_file)
 
 
-def rekey(data_file_paths):
-    """Re-encrypt files that share one password under a new password, changing all of them or none"""
+def rekey(data_file_paths, allow_legacy=False):
+    """Re-encrypt files that share one password under a new password, changing all of them or none
+
+    With allow_legacy, old files without integrity protection are accepted; they are written back with it.
+    """
     data_files = [File(path) for path in dict.fromkeys(data_file_paths)]
     old_passwd = getpass.getpass('Old password: ')
     # the plaintext is only ever held in memory; decrypting everything first means a wrong
     # password or an unreadable file stops us before any file is touched
-    plaintexts = [_decrypt_data_to_bytes(data_file, old_passwd) for data_file in data_files]
+    plaintexts = [_decrypt_data_to_bytes(data_file, old_passwd, allow_legacy) for data_file in data_files]
     new_passwd = _get_new_passphrase('New password: ')
 
     new_files = []

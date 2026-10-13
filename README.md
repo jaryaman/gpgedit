@@ -25,6 +25,12 @@ You are asked for the old password once, so the files must all share it, and the
 Each file is decrypted in memory, re-encrypted, and checked before the original is replaced.
 If any file cannot be decrypted, none of them are changed.
 
+Files written by GnuPG 1.x have no integrity protection, and gpg refuses to decrypt them.
+Add `--allow-legacy` to accept them; they are written back with integrity protection.
+```bash
+gpgedit --rekey --allow-legacy old_enc.txt
+```
+
 ## Development
 ```
 git clone https://github.com/jaryaman/gpgedit
